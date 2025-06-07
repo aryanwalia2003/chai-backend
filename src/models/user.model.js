@@ -18,7 +18,7 @@ const userSchema=new mongoose.Schema({
         lowercase:true,
         trim:true,
     },
-    fullName:{
+    fullname:{
         type:String,
         required:[true,"Full name is required"],
         trim:true,
@@ -62,7 +62,7 @@ userSchema.methods.generateAccessToken= async function(){ //to generate the acce
         _id:this._id, //the user id , it is preceeded by the underscore because it is a reserved keyword in javascript which means that it is a private property of the object and comes from the mongoose schema
         email:this.email, //the email of the user
         username:this.username, //the username of the user comes from the mongoose schema
-        fullName:this.fullName, //the full name of the user comes from the mongoose schema
+        fullname:this.fullname, //the full name of the user comes from the mongoose schema
     },process.env.ACCESS_TOKEN_SECRET,{ //the secret key is the access token secret key which is stored in the environment variables
         expiresIn:process.env.ACCESS_TOKEN_EXPIRY, //the expiry time is the access token expiry time which is stored in the environment variables
     }) 

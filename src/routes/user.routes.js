@@ -1,11 +1,11 @@
 import {Router} from "express"
 import { registerUser } from "../controllers/user.controller.js";
-import {upload} from "../middlewares/multer.middleware.js"
+import uploadLocally from "../middlewares/multer.middleware.js"
 
 const router=Router();
 
 router.route("/register").post(
-    upload.fields([
+    uploadLocally.fields([
         {
         name: "avatar",
         maxCount: 1
