@@ -1,7 +1,7 @@
 import {asyncHandler} from "../utils/asyncHandler.js"
 import {ApiError} from "../utils/apiErrors.js"
 import {User} from "../models/user.model.js"
-import {uploadOnCloudinary} from "../utils/cloudinary.js"
+import {uploadOnCloudinary,deleteOnCloudinary} from "../utils/cloudinary.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 import jwt from "jsonwebtoken"
 
@@ -351,6 +351,12 @@ const updateAvatar=asyncHandler(async(req,res)=>{
         throw new ApiError(500,"Failed to upload avatar on cloudinary")
     }
 
+    //delete old avatar from cloudinary if it exists
+    if(req.user?.avatar){
+        await deleteOnCloudinary(req.user.avatar)
+        console.log("old avatar deleted from cloudinary")
+    }
+
     const user=await User.findByIdAndUpdate(req.user?._id,{
         $set:{
             avatar,
@@ -372,8 +378,15 @@ const updateCoverImage=asyncHandler(async(req,res)=>{
 
     const coverImage=await uploadOnCloudinary(coverImageLocalPath)
     console.log("coverImage",coverImage)
+
     if(!coverImage){
         throw new ApiError(500,"Failed to upload cover image on cloudinary")
+    }
+
+    //delete old cover image from cloudinary if it exists
+    if(req.user?.coverImage){
+        await deleteOnCloudinary(req.user.coverImage)
+        console.log("old cover image deleted from cloudinary")
     }
 
     const user=await User.findByIdAndUpdate(req.user?._id,{
