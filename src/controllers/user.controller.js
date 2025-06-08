@@ -3,7 +3,7 @@ import {ApiError} from "../utils/apiErrors.js"
 import {User} from "../models/user.model.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
-
+import jwt from "jsonwebtoken"
 
 const generateAccessAndRefreshTokens = async(userId)=>{
     try{
@@ -15,8 +15,8 @@ const generateAccessAndRefreshTokens = async(userId)=>{
         const accessToken=await user.generateAccessToken()
         const refreshToken=await user.generateRefreshToken()
 
-        user.refreshToken=refreshToken
-        await user.save({   validateBeforeSave:false    })
+        user.refreshToken=refreshToken //refresh token ko user ke refresh token mein store karna hai
+        await user.save({   validateBeforeSave:false    }) //save the user
 
         return {accessToken,refreshToken}
     }
@@ -108,15 +108,15 @@ const loginUser=asyncHandler(async(req,res)=>{
     /*
     req.body se data milega
     username , email,password milega 
-    check karna hai using email or password if the user exists 
+    check karna hai using email or username if the user exists 
     if it doesnt exist return 404 not found
     if it exists , check if the password is correct
     if the password is correct , generate a access token and refresh token and send cookies
     if the password is incorrect , return 401 unauthorized
     */
 
-    const {username , email,password}=req.body;
-    console.log(username , email,password)
+    const {username,email,password}=req.body;
+    // console.log(username , email,password)
 
     if(!username && !email){
         throw new ApiError(400,"Username or email is required")
@@ -140,11 +140,11 @@ const loginUser=asyncHandler(async(req,res)=>{
     }
 
     const {accessToken,refreshToken}=await generateAccessAndRefreshTokens(user._id)
-    console.log("accessToken",accessToken)
-    console.log("refreshToken",refreshToken)
+    // console.log("accessToken",accessToken)
+    // console.log("refreshToken",refreshToken)
 
     const loggedInUser=await User.findById(user._id).select("-password -refreshToken")
-    console.log("loggedInUser",loggedInUser)
+    // console.log("loggedInUser",loggedInUser)
 
     const cookieOptions={
         httpOnly:true,
@@ -187,4 +187,75 @@ const logoutUser=asyncHandler(async(req,res)=>{
     )
 })
 
-export {registerUser,loginUser,logoutUser}
+const refreshAccessToken = asyncHandler(async(req, res) => {
+
+    /*
+    req.cookies se get the refresh token
+    agar mille toh aage bardho , agar na mille toh matlab logged in nahi hai
+    refresh token jo milla hai usko database waale refresh token se verify karo
+    agar refresh token match nahi karta hai toh error throw karo
+    agar match kar gaya toh user ko dhoond lo using findById
+    agar user nahi mila toh error throw karo
+    agar user mila toh new access token and refresh token generate karo
+    new access token and refresh token ko return karo
+    */
+    // Get refresh token from cookies or request body
+    const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
+
+    if(!incomingRefreshToken) {
+        throw new ApiError(401, "Unauthorized request - No refresh token provided")
+    }
+
+    try {
+        // Verify refresh token using correct secret
+        const decoded = jwt.verify(
+            incomingRefreshToken,
+            process.env.REFRESH_TOKEN_SECRET
+        )
+        console.log("decoded",decoded)
+        
+        if(!decoded){
+            throw new ApiError(401,"Invalid refresh token")
+        }
+        // Get user and validate
+        const user = await User.findById(decoded._id)
+        if(!user) {
+            throw new ApiError(404, "Invalid refresh token - User not found")
+        }
+
+        if(user.refreshToken !== incomingRefreshToken) {
+            throw new ApiError(401, "Refresh token is expired or used")
+        }
+
+        const cookieOptions = {
+            httpOnly: true,
+        }
+
+        // Generate new tokens
+        const {accessToken, refreshToken: newRefreshToken} = await generateAccessAndRefreshTokens(user._id) //generateAccessAndRefreshTokens is a function that generates a new access token and refresh token, and also stored the refresh token in db , that is why we dont need to that here
+        
+        // Update response with new tokens
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, {
+                ...cookieOptions,
+                maxAge: 24 * 60 * 60 * 1000 // 1 day
+            })
+            .cookie("refreshToken", newRefreshToken, {
+                ...cookieOptions,
+                maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+            })
+            .json(
+                new ApiResponse(
+                    200,
+                    {accessToken, refreshToken: newRefreshToken},
+                    "Access token refreshed successfully"
+                )
+            )
+
+    } catch (error) {
+        throw new ApiError(401, "Invalid refresh token - Please login again")
+    }
+})
+
+export {registerUser,loginUser,logoutUser,refreshAccessToken}
