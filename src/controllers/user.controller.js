@@ -399,4 +399,129 @@ const updateCoverImage=asyncHandler(async(req,res)=>{
         new ApiResponse(200,user,"Cover image updated successfully")
     )
 })
-export {registerUser,loginUser,logoutUser,refreshAccessToken,changePassword,getCurrentUser,updateAccountDetails,updateAvatar,updateCoverImage}
+
+const getUserChannelProfile=asyncHandler(async(req,res)=>{
+    const {username}=req.params //comes from the url
+
+    if (!username?.trim()){
+        throw new ApiError(400,"Username is required")
+    }
+
+    const channel = await User.aggregate([ // we are using aggregate to get the channel profile for the given username to get the subscribers and the channels that the user is subscribed to
+        // Match the user document with the given username (converted to lowercase)
+        {
+            // Match the user document with the given username (converted to lowercase)
+            $match: {
+                username: username?.toLowerCase() // yahan se username ko lowercase mein convert karega and match karega with the username in the database
+            }
+        },
+        // Lookup subscribers by matching user's _id with channel field in subscriptions
+        {
+            // Lookup subscribers by matching user's _id with channel field in subscriptions
+
+            $lookup: { //user ki id ko match karega with the channel feild in the subscriptions collection to find ki kitne users hai jinhone iss channel ko subscribe kiya hai
+                from: "subscriptions", //subscriptions mein jaake dekho 
+                localField: "_id", //user ka _id which comes from the user collection
+                foreignField: "channel", //subscription mein channel ka id hai jo user ke _id se match karega
+                as: "subscribers" //subscribers mein subscribers ka array store hoga
+            },
+        },
+        // Lookup channels this user subscribes to by matching user's _id with subscriber field
+        {
+            // Lookup channels this user subscribes to by matching user's _id with subscriber field
+            $lookup: { //user ki id match karega with the subscriber feild in the subscriptions collections to get user ne kis channel ko subscribe kiya hai
+                from: "subscriptions", //subscriptions mein jaake dekho 
+                localField: "_id", //user ka _id which comes from the user collection
+                foreignField: "subscriber", //subscriber ka id hai jo user ke _id se match karega
+                as: "subscribedTo" //subscribedTo mein subscribedTo ka array store hoga
+            },
+        },
+        // Add a new field to count total subscribers
+        {
+            $addFeilds:{
+                subscribersCount:{$size:"$subscribers"},
+                subscribedChannelsCount:{$size:"$subscribedTo"},
+                isSubscribed:{$cond:{
+                    if:{$in : [req.user?._id, "$subscribers.subscriber"]},
+                    then:true,
+                    else:false
+                }}
+            }
+        },
+        // Project the fields to be returned in the response
+        {
+            $project:{
+                username:1,
+                fullname:1,
+                email:1,
+                subscribersCount:1,
+                subscribedChannelsCount:1,
+                isSubscribed:1,
+                avatar:1,
+                coverImage:1,
+            }
+        }
+    ])
+
+    console.log("channel",channel)
+    console.log("channel[0]",channel[0])
+
+    if(!channel?.length){
+        throw new ApiError(404,"Channel not found")
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200,channel[0],"Channel profile fetched successfully")
+    )
+
+})
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+    const user = await User.aggregate([
+        // Match the user document based on authenticated user's ID
+        {
+            $match: {
+                _id: mongoose.Types.ObjectId(req.user?._id)
+            }
+        },
+        // Lookup videos from user's watch history
+        {
+            $lookup: {
+                from: "videos",
+                localField: "watchHistory", // Array of video IDs in user document
+                foreignField: "_id", // Match with video _id
+                as: "watchHistory",
+                pipeline: [
+                    // Nested lookup to get video owner details
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner", // Video owner ID
+                            foreignField: "_id", // Match with user _id
+                            as: "owner",
+                            pipeline: [
+                                // Project only required owner fields
+                                {
+                                    $project: {
+                                        username: 1,
+                                        fullname: 1,
+                                        avatar: 1
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ])
+
+    if (!user?.length) {
+        throw new ApiError(404, "User not found")
+    }
+
+    return res.status(200).json(
+        new ApiResponse(200, user[0].watchHistory, "Watch history fetched successfully")
+    )
+})
+export {registerUser,loginUser,logoutUser,refreshAccessToken,changePassword,getCurrentUser,updateAccountDetails,updateAvatar,updateCoverImage,getUserChannelProfile,getWatchHistory}
