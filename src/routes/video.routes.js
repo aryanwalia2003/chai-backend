@@ -17,4 +17,10 @@ router.route("/publish-video").post(
     publishVideo
 );
 
+router.route("/get-video-by-title/:title").get(getVideoByTitle)
+router.route("/get-video-by-id/:_id").get(getVideoByID)
+router.route("/get-all-videos/:channelId").get(getAllVideos)
+router.route("/delete-video/:_id").delete(verifyJWT, deleteVideo)
+
+
 export default router;
